@@ -96,7 +96,7 @@ def image2latent(image_folder, generator_model):
 
     lat_dict = {}
 
-    # lat_dict is a dictionary which
+    # lat_dict is a dictionary which contains latent codes for each image
 
     iterations = 6000
 
