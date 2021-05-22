@@ -8,7 +8,9 @@ implementation in tensorflow 2.x (https://github.com/moono/stylegan2-tf-2.x)
 Please check the above mentioned repository for details regarding the process
 of extracting official pretrained weights.
 
-The pickle file containing the dictionary of  latent vectors is stored in the input image folder.
+The pickle file containing the dictionary of latent vectors is stored in the input image folder.
+
+`project.py` is the python file which contains the required code for projection.
 
 Here `data_0` and `data_1`  folders contain images from LSUN (cat dataset), and their corresponding embeddings is stored
 in a '.pkl' file, present in the folders.
