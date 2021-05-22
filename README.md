@@ -10,8 +10,8 @@ of extracting official pretrained weights.
 
 The pickle file containing the dictionary of  latent vectors is stored in the input image folder.
 
-Here `data_0` and `data_1`  folders contain images from LSUN (cat dataset) and their corresponding embedding in a '.pkl'
-file, present in the respective folders.
+Here `data_0` and `data_1`  folders contain images from LSUN (cat dataset), and their corresponding embeddings is stored
+in a '.pkl' file, present in the folders.
 
 * Some results:
 
