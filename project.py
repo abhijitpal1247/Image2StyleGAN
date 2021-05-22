@@ -9,7 +9,10 @@ from tensorflow.keras.applications.vgg16 import preprocess_input
 from load_models import load_generator
 from inference_from_official_weights import main
 
-folder = input('folder:')
+folder = input(' Image folder:')
+
+if not os.path.isdir('Image2style_gen'):
+    os.mkdir('Image2style_gen')
 
 main()
 
@@ -41,14 +44,24 @@ g_params = {
 generator = load_generator(g_params, is_g_clone=True, ckpt_dir=ckpt_dir, custom_cuda=use_custom_cuda)
 
 
-def image2latent(folder, generator_model):
+def image2latent(image_folder, generator_model):
+    """
+    Creates latent vector for the images in the image folder, in the latent space of StyleGAN.
+    The latent vectors are stored in a pickle file.
+    :param image_folder: folder containing images to projected
+    :param generator_model: StyleGAN's generator instance
+    :return lat_dict: a dictionary of image file name and its embedding.
+    """
     mapped_latent = generator_model.g_mapping([tf.random.normal(
         shape=[10000, g_params['z_dim']]),
         tf.random.normal(shape=[10000, g_params['labels_dim']])])
-    w_broadcasted = tf.tile(mapped_latent[:, tf.newaxis],
-                            [1, len(resolutions) * 2, 1])
-    avg_latent = tf.expand_dims(tf.math.reduce_mean(w_broadcasted, axis=0),
+    w_broadcast = tf.tile(mapped_latent[:, tf.newaxis],
+                          [1, len(resolutions) * 2, 1])
+    avg_latent = tf.expand_dims(tf.math.reduce_mean(w_broadcast, axis=0),
                                 axis=0)
+
+    # avg_latent is a latent vector which has been averaged over 10000 mapped latent vectors
+    # this serves as a good starting point for projection instead of a random mapped latent vector
 
     vgg16 = tf.keras.applications.VGG16(include_top=False,
                                         input_shape=(256, 256, 3),
@@ -56,10 +69,16 @@ def image2latent(folder, generator_model):
     layer_names = ['block1_conv1', 'block2_conv1', 'block3_conv2', 'block4_conv2']
     layer_outputs = [vgg16.get_layer(layer_name).output for layer_name in layer_names]
     exp_vgg16 = tf.keras.Model(inputs=vgg16.input, outputs=layer_outputs)
+
+    # exp_vgg_16 is a tf.keras.Model instance whose outputs we will use in calculating perceptual distance
+
     inp = tf.keras.layers.Input(shape=[256, 256, 3])
     x = tf.keras.layers.Lambda(preprocess_input)(inp)
     out = exp_vgg16(x)
     mod_vgg16 = tf.keras.Model(inputs=inp, outputs=out)
+
+    # mod_vgg_16 is a tf.keras.Model which is very similar to the exp_vgg_16 model, the only difference being a
+    # preprocess layer introduced after the input layer
 
     inp1 = tf.keras.layers.Input(shape=[14, 512])
     gen_out = generator_model.synthesis(inp1)
@@ -71,28 +90,38 @@ def image2latent(folder, generator_model):
     model = tf.keras.Model(inputs=inp1, outputs=outputs)
     opt = tf.keras.optimizers.Adam(learning_rate=0.01,
                                    beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+
+    # model is again a tf.keras.Model instance which has concatenated the generator with mod_vgg_16 model
+    # this module will be used for projection
+
     lat_dict = {}
-    bar = tqdm(os.listdir(folder))
+
+    # lat_dict is a dictionary which
+
+    iterations = 6000
+
+    # the variable 'iterations' defines the number of iterations the projection will take place for every image
+
+    bar = tqdm(os.listdir(image_folder))
     for file_name in bar:
         if 'jpg' in file_name or 'png' in file_name:
-            image = cv2.imread(folder + '/' + file_name)
+            image = cv2.imread(image_folder + '/' + file_name)
             image = cv2.resize(image, (256, 256))
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             image = np.array(image)
             imwrite('Image2style_gen/' + 'real_' + file_name, image)
+
+            # real image i.e. the image to be projected is saved in the Image2style_gen folder.
+
             image = image.astype(np.float32)
             image = np.expand_dims(image, 0)
-            image = image.transpose((0, 3, 1, 2))
-            sh = image.shape
-            if sh[2] > 256:
-                factor = sh[2] // 256
-                image = tf.reduce_mean(
-                    tf.reshape(image, [-1, sh[1], sh[2] // factor, factor, sh[2] // factor, factor]),
-                    axis=[3, 5])
-            image = tf.transpose(image, [0, 2, 3, 1])
             og_vgg_features = mod_vgg16.predict(image)
+
+            # og_vgg_features contains vgg16 features corresponding to the original image.
+
             latent_variable = tf.Variable(avg_latent)
-            iterations = 6000
+
+            # latent_variable is a tf.Variable instance which will be updated at every projection step
 
             for j in range(iterations):
                 bar.set_description(desc=file_name + " %i/6000" % j)
@@ -120,6 +149,8 @@ def image2latent(folder, generator_model):
                 grads = tape.gradient(total_loss, [latent_variable])
                 opt.apply_gradients(zip(grads, [latent_variable]))
 
+                # here loss has been implemented according to the paper
+
                 if (j + 1) % 6000 == 0:
                     gen_im = generator_model.synthesis(latent_variable)
                     gen_im = tf.transpose(gen_im, [0, 2, 3, 1])
@@ -127,9 +158,15 @@ def image2latent(folder, generator_model):
                     gen_im = tf.cast(gen_im, tf.uint8)
                     imwrite('Image2style_gen/' + 'step_' + str(j + 1) + '_' + file_name,
                             gen_im[0].numpy())
+
+                    # at the end of all the projection steps the projected image is stored in the Image2style_gen.
+
             latent = latent_variable
             lat_dict[file_name] = latent
-            pickle.dump(lat_dict, open(folder + '/' + 'latent_codes_' + folder + '.pkl', 'wb'))
+
+            # lat_dict stores the latent corresponding to each filename.
+
+            pickle.dump(lat_dict, open(image_folder + '/' + 'latent_codes_' + image_folder + '.pkl', 'wb'))
 
     return lat_dict
 
