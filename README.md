@@ -15,6 +15,8 @@ The pickle file containing the dictionary of latent vectors is stored in the inp
 Here `data_0` and `data_1`  folders contain images from LSUN (cat dataset), and their corresponding embeddings is stored
 in a '.pkl' file, present in the folders.
 
+Google drive link: https://drive.google.com/drive/folders/1IYcIEXV1J0wA_lP1Jbh7qkz2PvX6Dc9S?usp=sharing
+
 * Some results:
 
 
